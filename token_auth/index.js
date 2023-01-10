@@ -5,6 +5,7 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const port = 3000;
 const fs = require('fs');
+const jwt = require('jsonwebtoken')
 
 const app = express();
 app.use(bodyParser.json());
@@ -51,12 +52,23 @@ class Session {
 }
 
 const sessions = new Session();
-
-app.use((req, res, next) => {
+let publicKey = null;
+const getPublicKey = async () => {
+	await request('https://kpi.eu.auth0.com/pem', function(err, response, body){
+        publicKey=body;
+    });
+};
+app.use(async (req, res, next) => {
     let currentSession = {};
     let sessionId = req.get(SESSION_KEY);
-
     if (sessionId) {
+        try {
+            const tokenValue = jwt.verify(sessionId, publicKey);
+            console.log({ tokenValue })
+          } catch (err) {
+            console.error(err);
+            return res.status(401).end();
+          }
         currentSession = sessions.get(sessionId);
     }
     req.session = currentSession;
@@ -79,21 +91,8 @@ app.get('/logout', (req, res) => {
     res.redirect('/');
 });
 
-const users = [
-    {
-        login: 'Login',
-        password: 'Password',
-        username: 'Username',
-    },
-    {
-        login: 'Login1',
-        password: 'Password1',
-        username: 'Username1',
-    }
-]
 
 let request = require("request");
-
 
 
 app.post('/api/login', (req, res) => {
@@ -114,7 +113,7 @@ app.post('/api/login', (req, res) => {
 }
     };
     request(options, function(error, response, body){
-        if (error) return res.status(401).send();
+        if (error) throw new Error(error)
         if (body) {
             console.log(body);
             let bodyjson = JSON.parse(body);
@@ -128,6 +127,8 @@ app.post('/api/login', (req, res) => {
     });
 });
 
-app.listen(port, () => {
+app.listen(port, async () => {
+    await getPublicKey();
+    console.log(publicKey);
     console.log(`Example app listening on port ${port}`)
 })
