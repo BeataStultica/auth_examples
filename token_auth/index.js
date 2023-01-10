@@ -42,12 +42,6 @@ class Session {
         return this.#sessions[key];
     }
 
-    init(res) {
-        const sessionId = uuid.v4();
-        this.set(sessionId);
-
-        return sessionId;
-    }
 
     destroy(req, res) {
         const sessionId = req.sessionId;
@@ -64,23 +58,9 @@ app.use((req, res, next) => {
 
     if (sessionId) {
         currentSession = sessions.get(sessionId);
-        if (!currentSession) {
-            currentSession = {};
-            sessionId = sessions.init(res);
-        }
-    } else {
-        sessionId = sessions.init(res);
     }
-
     req.session = currentSession;
     req.sessionId = sessionId;
-
-    onFinished(req, () => {
-        const currentSession = req.session;
-        const sessionId = req.sessionId;
-        sessions.set(sessionId, currentSession);
-    });
-
     next();
 });
 
@@ -112,24 +92,40 @@ const users = [
     }
 ]
 
+let request = require("request");
+
+
+
 app.post('/api/login', (req, res) => {
     const { login, password } = req.body;
-
-    const user = users.find((user) => {
-        if (user.login == login && user.password == password) {
-            return true;
+    let options = { method: "POST",
+    url: "https://kpi.eu.auth0.com/oauth/token",
+    headers: {'content-type': 'application/x-www-form-urlencoded'},
+    form:
+    {
+        client_id: 'JIvCO5c2IBHlAe2patn6l6q5H35qxti0',
+        audience: 'https://kpi.eu.auth0.com/api/v2/',
+        realm: 'Username-Password-Authentication',
+        scope: 'offline_access',
+        client_secret: 'ZRF8Op0tWM36p1_hxXTU-B0K_Gq_-eAVtlrQpY24CasYiDmcXBhNS6IJMNcz1EgB',
+        username:login, 
+        password:password, 
+        grant_type: 'http://auth0.com/oauth/grant-type/password-realm',
+}
+    };
+    request(options, function(error, response, body){
+        if (error) return res.status(401).send();
+        if (body) {
+            console.log(body);
+            let bodyjson = JSON.parse(body);
+            if (bodyjson.error) res.status(401).send();
+            else{
+                sessions.set(bodyjson.access_token,{username:login})
+        
+                res.json({ token: bodyjson.access_token });
+            }
         }
-        return false
     });
-
-    if (user) {
-        req.session.username = user.username;
-        req.session.login = user.login;
-
-        res.json({ token: req.sessionId });
-    }
-
-    res.status(401).send();
 });
 
 app.listen(port, () => {
